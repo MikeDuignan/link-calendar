@@ -93,7 +93,7 @@ async function handlePost(req, res) {
       for (const e of entries) {
         const date = String(e?.date ?? "").trim();
         if (!isIsoDate(date)) continue;
-        const title = clampText(e?.title, 120);
+        const title = clampText(e?.title, 2000);
         const url = normalizeUrl(e?.url);
         if (!title && !url) {
           await deleteOne({ pool: client, calendarId, date });
@@ -115,7 +115,7 @@ async function handlePost(req, res) {
   const date = String(body?.date ?? "").trim();
   if (!isIsoDate(date)) return sendJson(res, 400, { error: "Missing/invalid date (YYYY-MM-DD)." });
 
-  const title = clampText(body?.title, 120);
+  const title = clampText(body?.title, 2000);
   const url = normalizeUrl(body?.url);
   if (!title && !url) {
     await deleteOne({ pool, calendarId, date });

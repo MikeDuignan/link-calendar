@@ -221,6 +221,7 @@ body::before {
 .row { display: grid; grid-template-columns: 70px 1fr; gap: 10px; align-items: start; }
 .label { font-size: 12px; color: var(--muted); }
 .value { font-size: 13px; word-break: break-word; }
+#sideTitle { white-space: pre-wrap; }
 .link { color: var(--text); text-decoration: underline; text-decoration-color: rgba(122, 162, 255, 0.45); }
 .link:hover { text-decoration-color: rgba(122, 162, 255, 0.9); }
 .sideActions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
@@ -248,7 +249,20 @@ input[type="text"], input[type="url"] {
   color: var(--text);
   font-size: 13px;
 }
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 13px;
+  resize: vertical;
+  min-height: 98px;
+  line-height: 1.35;
+}
 input:focus-visible { outline: 2px solid rgba(122, 162, 255, 0.85); outline-offset: 2px; }
+textarea:focus-visible { outline: 2px solid rgba(122, 162, 255, 0.85); outline-offset: 2px; }
 .hint { font-size: 12px; }
 .dialogActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 

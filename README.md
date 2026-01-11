@@ -17,8 +17,16 @@ A tiny calendar that lets you save a link per day. When deployed on Vercel, it s
 
 The table is created automatically on first use.
 
+## Import the Academic Calendar PDF
+
+This repo includes a one-time importer that extracts dated items from `Academic Calendar 2025-2026 Approved 24Mar25 V1.pdf` and saves them into your calendar (Vercel Postgres).
+
+1. Install Python deps: `python -m pip install -r scripts/requirements.txt`
+2. Get your **Calendar key** from the app UI
+3. Run:
+   - `python scripts/import_academic_calendar_pdf.py --pdf \"../Academic Calendar 2025-2026 Approved 24Mar25 V1.pdf\" --base-url \"https://YOUR-APP.vercel.app\" --calendar-id \"YOUR_CALENDAR_KEY\"`
+
 ## Run locally
 
 - Open `index.html` for a local-only version (no cloud sync).
 - Cloud sync requires deploying to Vercel (or running with Vercel CLI).
-
