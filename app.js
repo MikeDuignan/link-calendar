@@ -152,6 +152,7 @@ const elements = {
   importFile: document.getElementById("importFile"),
   cloudStatus: document.getElementById("cloudStatus"),
   manageCalendar: document.getElementById("manageCalendar"),
+  importAcademic: document.getElementById("importAcademic"),
 
   sideDate: document.getElementById("sideDate"),
   sideEmpty: document.getElementById("sideEmpty"),
@@ -347,15 +348,18 @@ async function trySyncPending() {
 
   try {
     setCloudPill({ ok: true, message: "Syncing…" });
-    const entries = items.map(([date, value]) => ({
-      date,
-      title: value?.title ?? "",
-      url: value?.url ?? "",
-    }));
-    await fetchJson("/api/entries", {
-      method: "POST",
-      body: JSON.stringify({ calendarId: state.calendarId, entries }),
-    });
+    for (let i = 0; i < items.length; i += 500) {
+      const chunk = items.slice(i, i + 500);
+      const entries = chunk.map(([date, value]) => ({
+        date,
+        title: value?.title ?? "",
+        url: value?.url ?? "",
+      }));
+      await fetchJson("/api/entries", {
+        method: "POST",
+        body: JSON.stringify({ calendarId: state.calendarId, entries }),
+      });
+    }
     state.cache.pending = {};
     saveCache(state.calendarId, state.cache);
   } catch (error) {
@@ -537,6 +541,47 @@ async function importDataFromFile(file) {
   saveCache(state.calendarId, state.cache);
 }
 
+async function importAcademicCalendar() {
+  const ok = confirm(
+    "Import Academic Calendar 2025-2026 into your current Calendar key?\n\nThis will add/overwrite notes on those dates.",
+  );
+  if (!ok) return;
+
+  let dataset;
+  try {
+    dataset = await fetchJson("/data/academic-calendar-2025-2026.json");
+  } catch (error) {
+    toast("Import failed", error?.message ?? "Could not load dataset.");
+    return;
+  }
+
+  const entries = Array.isArray(dataset?.entries) ? dataset.entries : null;
+  if (!entries) {
+    toast("Import failed", "Dataset format unexpected.");
+    return;
+  }
+
+  let added = 0;
+  if (!state.cache.entries || typeof state.cache.entries !== "object") state.cache.entries = {};
+  if (!state.cache.pending || typeof state.cache.pending !== "object") state.cache.pending = {};
+  for (const e of entries) {
+    const date = String(e?.date ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const title = String(e?.title ?? "").trim();
+    const url = normalizeUrl(e?.url);
+    if (!title && !url) continue;
+    state.cache.entries[date] = { title, url, updatedAt: null };
+    state.cache.pending[date] = { title, url, updatedAt: null };
+    added += 1;
+  }
+  saveCache(state.calendarId, state.cache);
+
+  renderSide();
+  renderCalendar();
+  toast("Imported", `Added ${added} date(s). Syncing…`);
+  await trySyncPending();
+}
+
 function openCalendarDialog() {
   elements.calendarKey.value = state.calendarId;
   elements.calendarDialog.showModal();
@@ -603,6 +648,7 @@ function wireEvents() {
   });
 
   elements.manageCalendar.addEventListener("click", openCalendarDialog);
+  elements.importAcademic.addEventListener("click", importAcademicCalendar);
 
   elements.copyCalendarKey.addEventListener("click", async () => {
     await navigator.clipboard.writeText(String(elements.calendarKey.value ?? ""));

@@ -26,6 +26,8 @@ This repo includes a one-time importer that extracts dated items from `Academic 
 3. Run:
    - `python scripts/import_academic_calendar_pdf.py --pdf \"../Academic Calendar 2025-2026 Approved 24Mar25 V1.pdf\" --base-url \"https://YOUR-APP.vercel.app\" --calendar-id \"YOUR_CALENDAR_KEY\"`
 
+Alternatively (easiest): click `Import academic 25/26` in the app UI.
+
 ## Run locally
 
 - Open `index.html` for a local-only version (no cloud sync).
