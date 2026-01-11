@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Link Calendar</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <h1>Link Calendar</h1>
+        <p class="muted">Save one link per day (stored locally in your browser).</p>
+      </div>
+
+      <div class="controls" aria-label="Calendar controls">
+        <button id="prevMonth" type="button" class="btn">←</button>
+        <button id="today" type="button" class="btn">Today</button>
+        <button id="nextMonth" type="button" class="btn">→</button>
+
+        <div class="spacer" aria-hidden="true"></div>
+
+        <button id="exportData" type="button" class="btn btn-secondary">Export</button>
+        <label class="btn btn-secondary">
+          Import
+          <input id="importFile" type="file" accept="application/json" hidden />
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="calendar" aria-label="Month view">
+        <div class="monthTitle">
+          <h2 id="monthHeading">Month</h2>
+          <div class="legend">
+            <span class="dot"></span>
+            <span class="muted">has link</span>
+          </div>
+        </div>
+
+        <div class="dow" aria-hidden="true">
+          <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+        </div>
+
+        <div id="grid" class="grid" role="grid" aria-label="Days"></div>
+      </section>
+
+      <aside class="side" aria-label="Selected day">
+        <div class="card">
+          <h3 id="sideDate">Select a day</h3>
+          <div id="sideEmpty" class="muted">Click a day to add or edit its link.</div>
+          <div id="sideDetails" class="sideDetails" hidden>
+            <div class="row">
+              <div class="label">Title</div>
+              <div id="sideTitle" class="value"></div>
+            </div>
+            <div class="row">
+              <div class="label">URL</div>
+              <a id="sideUrl" class="value link" href="#" target="_blank" rel="noreferrer noopener"></a>
+            </div>
+            <div class="sideActions">
+              <button id="editSelected" type="button" class="btn">Edit</button>
+              <button id="clearSelected" type="button" class="btn btn-danger">Clear</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <dialog id="editDialog" class="dialog" aria-label="Edit link">
+      <form method="dialog" class="dialogBody" id="editForm">
+        <h3 id="dialogHeading">Edit</h3>
+
+        <label class="field">
+          <span>Title</span>
+          <input id="fieldTitle" name="title" type="text" maxlength="120" placeholder="e.g., Meeting notes" />
+        </label>
+
+        <label class="field">
+          <span>URL</span>
+          <input id="fieldUrl" name="url" type="url" placeholder="https://example.com" />
+          <span class="hint muted">Tip: paste any valid URL. Leave blank to remove the link.</span>
+        </label>
+
+        <div class="dialogActions">
+          <button id="cancelEdit" type="button" class="btn btn-secondary">Cancel</button>
+          <button id="saveEdit" type="submit" class="btn">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
+
