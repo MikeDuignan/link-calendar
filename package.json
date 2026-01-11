@@ -1,0 +1,14 @@
+{
+  "name": "link-calendar",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A tiny calendar to save a link per day.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
+

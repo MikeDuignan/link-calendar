@@ -10,16 +10,18 @@
     <header class="topbar">
       <div class="brand">
         <h1>Link Calendar</h1>
-        <p class="muted">Save one link per day (stored locally in your browser).</p>
+        <p class="muted">One link per day, synced to your tiny cloud database.</p>
       </div>
 
       <div class="controls" aria-label="Calendar controls">
-        <button id="prevMonth" type="button" class="btn">←</button>
+        <button id="prevMonth" type="button" class="btn" aria-label="Previous month">←</button>
         <button id="today" type="button" class="btn">Today</button>
-        <button id="nextMonth" type="button" class="btn">→</button>
+        <button id="nextMonth" type="button" class="btn" aria-label="Next month">→</button>
 
         <div class="spacer" aria-hidden="true"></div>
 
+        <div id="cloudStatus" class="pill" role="status" aria-live="polite">Connecting…</div>
+        <button id="manageCalendar" type="button" class="btn btn-secondary">Calendar key</button>
         <button id="exportData" type="button" class="btn btn-secondary">Export</button>
         <label class="btn btn-secondary">
           Import
@@ -31,7 +33,10 @@
     <main class="layout">
       <section class="calendar" aria-label="Month view">
         <div class="monthTitle">
-          <h2 id="monthHeading">Month</h2>
+          <div class="monthLeft">
+            <h2 id="monthHeading">Month</h2>
+            <div id="monthStats" class="monthStats muted"></div>
+          </div>
           <div class="legend">
             <span class="dot"></span>
             <span class="muted">has link</span>
@@ -89,7 +94,29 @@
       </form>
     </dialog>
 
+    <dialog id="calendarDialog" class="dialog" aria-label="Calendar key">
+      <form method="dialog" class="dialogBody" id="calendarForm">
+        <h3>Calendar key</h3>
+        <div class="muted">
+          This key is stored in your browser and used to load/save your links from the database.
+        </div>
+
+        <label class="field">
+          <span>Current key</span>
+          <input id="calendarKey" type="text" autocomplete="off" spellcheck="false" />
+          <span class="hint muted">Keep this private. Anyone with it can view/edit this calendar.</span>
+        </label>
+
+        <div class="dialogActions">
+          <button id="copyCalendarKey" type="button" class="btn btn-secondary">Copy</button>
+          <button id="newCalendarKey" type="button" class="btn btn-secondary">New key</button>
+          <button id="saveCalendarKey" type="submit" class="btn">Use key</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="true"></div>
+
     <script src="./app.js" type="module"></script>
   </body>
 </html>
-

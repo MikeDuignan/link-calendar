@@ -1,4 +1,6 @@
-const STORAGE_KEY = "linkCalendar.v1";
+const LEGACY_STORAGE_KEY = "linkCalendar.v1";
+const CALENDAR_ID_KEY = "linkCalendar.calendarId.v1";
+const CACHE_PREFIX = "linkCalendar.cache.v2.";
 
 function pad2(value) {
   return String(value).padStart(2, "0");
@@ -23,38 +25,22 @@ function parseISODate(iso) {
   return date;
 }
 
+function monthKeyFromDate(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+}
+
 function normalizeUrl(url) {
   const trimmed = String(url ?? "").trim();
   if (!trimmed) return "";
   try {
-    const asUrl = new URL(trimmed);
-    return asUrl.toString();
+    return new URL(trimmed).toString();
   } catch {
-    // Allow users to paste without scheme.
     try {
-      const asUrl = new URL(`https://${trimmed}`);
-      return asUrl.toString();
+      return new URL(`https://${trimmed}`).toString();
     } catch {
       return "";
     }
   }
-}
-
-function loadStore() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { entries: {} };
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return { entries: {} };
-    if (!parsed.entries || typeof parsed.entries !== "object") return { entries: {} };
-    return { entries: parsed.entries };
-  } catch {
-    return { entries: {} };
-  }
-}
-
-function saveStore(store) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }
 
 function formatMonthHeading(date) {
@@ -64,9 +50,12 @@ function formatMonthHeading(date) {
 function formatSideDate(iso) {
   const date = parseISODate(iso);
   if (!date) return iso;
-  return new Intl.DateTimeFormat(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(
-    date,
-  );
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date);
 }
 
 function mondayFirstIndex(jsDay) {
@@ -84,14 +73,85 @@ function getTodayISO() {
   return toISODate(new Date());
 }
 
+function safeJsonParse(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getOrCreateCalendarId() {
+  const existing = String(localStorage.getItem(CALENDAR_ID_KEY) ?? "").trim();
+  if (existing) return existing;
+  const generated = (crypto?.randomUUID ? crypto.randomUUID() : `cal_${Date.now()}_${Math.random()}`)
+    .toString()
+    .trim();
+  localStorage.setItem(CALENDAR_ID_KEY, generated);
+  return generated;
+}
+
+function cacheKey(calendarId) {
+  return `${CACHE_PREFIX}${calendarId}`;
+}
+
+function loadCache(calendarId) {
+  const raw = localStorage.getItem(cacheKey(calendarId));
+  if (!raw) return { entries: {}, pending: {} };
+  const parsed = safeJsonParse(raw);
+  if (!parsed || typeof parsed !== "object") return { entries: {}, pending: {} };
+  const entries = parsed.entries && typeof parsed.entries === "object" ? parsed.entries : {};
+  const pending = parsed.pending && typeof parsed.pending === "object" ? parsed.pending : {};
+  return { entries, pending };
+}
+
+function saveCache(calendarId, cache) {
+  localStorage.setItem(cacheKey(calendarId), JSON.stringify(cache));
+}
+
+function toast(title, message) {
+  const host = document.getElementById("toastHost");
+  if (!host) return;
+
+  const el = document.createElement("div");
+  el.className = "toast";
+  const t = document.createElement("div");
+  t.className = "title";
+  t.textContent = title;
+  const m = document.createElement("div");
+  m.className = "msg";
+  m.textContent = message;
+  el.append(t, m);
+  host.appendChild(el);
+
+  setTimeout(() => el.remove(), 4500);
+}
+
+async function fetchJson(url, options) {
+  const response = await fetch(url, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...(options?.headers || {}) },
+  });
+  const text = await response.text();
+  const body = text ? safeJsonParse(text) : null;
+  if (!response.ok) {
+    const msg = body?.error || `${response.status} ${response.statusText}`.trim();
+    throw new Error(msg);
+  }
+  return body;
+}
+
 const elements = {
   monthHeading: document.getElementById("monthHeading"),
+  monthStats: document.getElementById("monthStats"),
   grid: document.getElementById("grid"),
   prevMonth: document.getElementById("prevMonth"),
   nextMonth: document.getElementById("nextMonth"),
   today: document.getElementById("today"),
   exportData: document.getElementById("exportData"),
   importFile: document.getElementById("importFile"),
+  cloudStatus: document.getElementById("cloudStatus"),
+  manageCalendar: document.getElementById("manageCalendar"),
 
   sideDate: document.getElementById("sideDate"),
   sideEmpty: document.getElementById("sideEmpty"),
@@ -107,42 +167,71 @@ const elements = {
   fieldTitle: document.getElementById("fieldTitle"),
   fieldUrl: document.getElementById("fieldUrl"),
   cancelEdit: document.getElementById("cancelEdit"),
+
+  calendarDialog: document.getElementById("calendarDialog"),
+  calendarForm: document.getElementById("calendarForm"),
+  calendarKey: document.getElementById("calendarKey"),
+  copyCalendarKey: document.getElementById("copyCalendarKey"),
+  newCalendarKey: document.getElementById("newCalendarKey"),
 };
 
 const state = {
   viewDate: new Date(),
-  selectedISO: "",
-  store: loadStore(),
+  selectedISO: getTodayISO(),
+  calendarId: getOrCreateCalendarId(),
+  cache: null,
+  cloud: {
+    ready: false,
+    ok: false,
+    lastError: "",
+  },
+  loadedMonths: new Set(),
+  loadSeq: 0,
 };
 
+state.cache = loadCache(state.calendarId);
+
+function setCloudPill({ ok, message }) {
+  if (!elements.cloudStatus) return;
+  elements.cloudStatus.textContent = message;
+  elements.cloudStatus.classList.toggle("ok", Boolean(ok));
+  elements.cloudStatus.classList.toggle("bad", ok === false);
+}
+
 function getEntry(iso) {
-  const entry = state.store.entries?.[iso];
+  const entry = state.cache.entries?.[iso];
   if (!entry || typeof entry !== "object") return null;
   const title = String(entry.title ?? "").trim();
   const url = normalizeUrl(entry.url ?? "");
+  const updatedAt = entry.updatedAt ? String(entry.updatedAt) : null;
   if (!title && !url) return null;
-  return { title, url };
+  return { title, url, updatedAt };
 }
 
-function setEntry(iso, entry) {
-  if (!state.store.entries || typeof state.store.entries !== "object") state.store.entries = {};
-  if (!entry) {
-    delete state.store.entries[iso];
+function setEntryLocal(iso, entryOrNull) {
+  if (!state.cache.entries || typeof state.cache.entries !== "object") state.cache.entries = {};
+  if (!state.cache.pending || typeof state.cache.pending !== "object") state.cache.pending = {};
+
+  if (!entryOrNull) {
+    delete state.cache.entries[iso];
+    state.cache.pending[iso] = null;
   } else {
-    state.store.entries[iso] = entry;
+    state.cache.entries[iso] = entryOrNull;
+    state.cache.pending[iso] = entryOrNull;
   }
-  saveStore(state.store);
+
+  saveCache(state.calendarId, state.cache);
 }
 
 function renderSide() {
+  elements.sideDate.textContent = state.selectedISO ? formatSideDate(state.selectedISO) : "Select a day";
+
   if (!state.selectedISO) {
-    elements.sideDate.textContent = "Select a day";
     elements.sideEmpty.hidden = false;
     elements.sideDetails.hidden = true;
     return;
   }
 
-  elements.sideDate.textContent = formatSideDate(state.selectedISO);
   const entry = getEntry(state.selectedISO);
   if (!entry) {
     elements.sideEmpty.textContent = "No link saved for this day.";
@@ -162,6 +251,17 @@ function renderSide() {
 
 function renderCalendar() {
   elements.monthHeading.textContent = formatMonthHeading(state.viewDate);
+
+  const monthPrefix = `${state.viewDate.getFullYear()}-${pad2(state.viewDate.getMonth() + 1)}-`;
+  const monthCount = Object.keys(state.cache.entries || {}).filter((k) => k.startsWith(monthPrefix)).length;
+  const totalCount = Object.keys(state.cache.entries || {}).length;
+  const pendingCount = Object.keys(state.cache.pending || {}).length;
+  if (elements.monthStats) {
+    elements.monthStats.textContent = `${monthCount} this month • ${totalCount} total${
+      pendingCount ? ` • ${pendingCount} pending` : ""
+    }`;
+  }
+
   elements.grid.replaceChildren();
 
   const anchor = getMonthGridAnchor(state.viewDate);
@@ -239,17 +339,142 @@ function closeEditDialog() {
   if (elements.editDialog.open) elements.editDialog.close();
 }
 
-function handleSaveFromDialog() {
+async function trySyncPending() {
+  const pending = state.cache.pending || {};
+  const items = Object.entries(pending);
+  if (!items.length) return;
+
+  try {
+    setCloudPill({ ok: true, message: "Syncing…" });
+    const entries = items.map(([date, value]) => ({
+      date,
+      title: value?.title ?? "",
+      url: value?.url ?? "",
+    }));
+    await fetchJson("/api/entries", {
+      method: "POST",
+      body: JSON.stringify({ calendarId: state.calendarId, entries }),
+    });
+    state.cache.pending = {};
+    saveCache(state.calendarId, state.cache);
+  } catch (error) {
+    state.cloud.ok = false;
+    state.cloud.lastError = error?.message ?? "Sync failed.";
+    setCloudPill({ ok: false, message: "Cloud error" });
+  }
+}
+
+async function loadMonthFromCloud(date) {
+  const month = monthKeyFromDate(date);
+  if (state.loadedMonths.has(month)) return;
+  const seq = (state.loadSeq += 1);
+
+  try {
+    setCloudPill({ ok: true, message: "Loading…" });
+    const result = await fetchJson(
+      `/api/entries?calendarId=${encodeURIComponent(state.calendarId)}&month=${encodeURIComponent(month)}`,
+    );
+    if (seq !== state.loadSeq) return;
+
+    for (const entry of result?.entries || []) {
+      if (!entry?.date) continue;
+      const title = String(entry.title ?? "").trim();
+      const url = normalizeUrl(entry.url ?? "");
+      const updatedAt = entry.updatedAt ? String(entry.updatedAt) : null;
+      if (!title && !url) continue;
+      state.cache.entries[entry.date] = { title, url, updatedAt };
+    }
+    saveCache(state.calendarId, state.cache);
+    state.loadedMonths.add(month);
+
+    state.cloud.ok = true;
+    setCloudPill({ ok: true, message: "Cloud synced" });
+  } catch (error) {
+    state.cloud.ok = false;
+    state.cloud.lastError = error?.message ?? "Cloud unavailable.";
+    setCloudPill({ ok: false, message: "Cloud error" });
+  }
+}
+
+async function detectCloud() {
+  try {
+    await fetchJson("/api/health");
+    state.cloud.ready = true;
+    state.cloud.ok = true;
+    setCloudPill({ ok: true, message: "Cloud ready" });
+  } catch (error) {
+    state.cloud.ready = true;
+    state.cloud.ok = false;
+    state.cloud.lastError = error?.message ?? "Cloud unavailable.";
+    setCloudPill({ ok: false, message: "No cloud" });
+  }
+}
+
+async function maybeMigrateLegacyLocalData() {
+  const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (!raw) return;
+
+  const parsed = safeJsonParse(raw);
+  const legacyEntries = parsed?.entries && typeof parsed.entries === "object" ? parsed.entries : null;
+  if (!legacyEntries) return;
+  const legacyCount = Object.keys(legacyEntries).length;
+  if (!legacyCount) return;
+
+  const ok = confirm(
+    `Found ${legacyCount} saved day link(s) from an older version.\n\nImport them into your cloud calendar now?`,
+  );
+  if (!ok) return;
+
+  const entries = Object.entries(legacyEntries)
+    .map(([date, value]) => ({
+      date,
+      title: String(value?.title ?? "").trim(),
+      url: normalizeUrl(value?.url),
+    }))
+    .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date));
+
+  for (const e of entries) {
+    if (!e.title && !e.url) continue;
+    state.cache.entries[e.date] = { title: e.title, url: e.url, updatedAt: null };
+    state.cache.pending[e.date] = { title: e.title, url: e.url, updatedAt: null };
+  }
+  saveCache(state.calendarId, state.cache);
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+
+  toast("Imported", "Legacy local data imported. Syncing to cloud…");
+  await trySyncPending();
+}
+
+async function handleSaveFromDialog() {
+  const iso = state.selectedISO;
   const title = String(elements.fieldTitle.value ?? "").trim();
   const url = normalizeUrl(elements.fieldUrl.value ?? "");
+
   if (!title && !url) {
-    setEntry(state.selectedISO, null);
+    setEntryLocal(iso, null);
   } else {
-    setEntry(state.selectedISO, { title, url });
+    setEntryLocal(iso, { title, url, updatedAt: new Date().toISOString() });
   }
+
   closeEditDialog();
   renderSide();
   renderCalendar();
+
+  try {
+    await fetchJson("/api/entries", {
+      method: "POST",
+      body: JSON.stringify({ calendarId: state.calendarId, date: iso, title, url }),
+    });
+    delete state.cache.pending[iso];
+    saveCache(state.calendarId, state.cache);
+    state.cloud.ok = true;
+    setCloudPill({ ok: true, message: "Cloud synced" });
+  } catch (error) {
+    state.cloud.ok = false;
+    state.cloud.lastError = error?.message ?? "Save failed.";
+    setCloudPill({ ok: false, message: "Cloud error" });
+    toast("Saved locally", "Cloud save failed; will retry when available.");
+  }
 }
 
 function downloadJson(filename, value) {
@@ -264,41 +489,101 @@ function downloadJson(filename, value) {
   URL.revokeObjectURL(url);
 }
 
-function exportData() {
-  downloadJson("link-calendar-export.json", { exportedAt: new Date().toISOString(), ...state.store });
+async function exportData() {
+  try {
+    const body = await fetchJson(`/api/export?calendarId=${encodeURIComponent(state.calendarId)}`);
+    downloadJson("link-calendar-export.json", body);
+  } catch (error) {
+    downloadJson("link-calendar-export.json", { exportedAt: new Date().toISOString(), calendarId: state.calendarId, ...state.cache });
+    toast("Exported", "Cloud export failed; exported local cache instead.");
+  }
 }
 
 async function importDataFromFile(file) {
   const text = await file.text();
-  const parsed = JSON.parse(text);
-  if (!parsed || typeof parsed !== "object" || !parsed.entries || typeof parsed.entries !== "object") {
-    throw new Error("Invalid file format.");
-  }
+  const parsed = safeJsonParse(text);
 
-  const replace = confirm("Import will REPLACE your current saved links for any matching dates. Continue?");
+  const entriesArray = Array.isArray(parsed?.entries)
+    ? parsed.entries
+    : parsed?.entries && typeof parsed.entries === "object"
+      ? Object.entries(parsed.entries).map(([date, v]) => ({ date, ...v }))
+      : null;
+
+  if (!entriesArray) throw new Error("Invalid file format.");
+
+  const replace = confirm("Import will MERGE into your current calendar key. Continue?");
   if (!replace) return;
 
-  const next = loadStore();
-  next.entries = { ...(next.entries || {}), ...(parsed.entries || {}) };
-  state.store = next;
-  saveStore(state.store);
+  const toUpsert = [];
+  for (const e of entriesArray) {
+    const date = String(e?.date ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const title = String(e?.title ?? "").trim();
+    const url = normalizeUrl(e?.url);
+    if (!title && !url) continue;
+    toUpsert.push({ date, title, url });
+    state.cache.entries[date] = { title, url, updatedAt: null };
+    state.cache.pending[date] = { title, url, updatedAt: null };
+  }
+  saveCache(state.calendarId, state.cache);
+
+  for (let i = 0; i < toUpsert.length; i += 500) {
+    const chunk = toUpsert.slice(i, i + 500);
+    await fetchJson("/api/entries", { method: "POST", body: JSON.stringify({ calendarId: state.calendarId, entries: chunk }) });
+  }
+
+  state.cache.pending = {};
+  saveCache(state.calendarId, state.cache);
+}
+
+function openCalendarDialog() {
+  elements.calendarKey.value = state.calendarId;
+  elements.calendarDialog.showModal();
+  setTimeout(() => elements.calendarKey.select(), 0);
+}
+
+function closeCalendarDialog() {
+  if (elements.calendarDialog.open) elements.calendarDialog.close();
+}
+
+async function useCalendarId(nextId) {
+  const trimmed = String(nextId ?? "").trim();
+  if (trimmed.length < 10) {
+    toast("Calendar key", "That key looks too short.");
+    return;
+  }
+
+  state.calendarId = trimmed;
+  localStorage.setItem(CALENDAR_ID_KEY, state.calendarId);
+  state.cache = loadCache(state.calendarId);
+  state.loadedMonths = new Set();
+
+  renderSide();
+  renderCalendar();
+
+  await detectCloud();
+  await loadMonthFromCloud(state.viewDate);
+  await trySyncPending();
 }
 
 function wireEvents() {
-  elements.prevMonth.addEventListener("click", () => {
+  elements.prevMonth.addEventListener("click", async () => {
     state.viewDate = new Date(state.viewDate.getFullYear(), state.viewDate.getMonth() - 1, 1);
     renderCalendar();
+    await loadMonthFromCloud(state.viewDate);
   });
-  elements.nextMonth.addEventListener("click", () => {
+  elements.nextMonth.addEventListener("click", async () => {
     state.viewDate = new Date(state.viewDate.getFullYear(), state.viewDate.getMonth() + 1, 1);
     renderCalendar();
+    await loadMonthFromCloud(state.viewDate);
   });
-  elements.today.addEventListener("click", () => {
+  elements.today.addEventListener("click", async () => {
     const now = new Date();
     state.viewDate = new Date(now.getFullYear(), now.getMonth(), 1);
     state.selectedISO = toISODate(now);
     renderSide();
     renderCalendar();
+    await loadMonthFromCloud(state.viewDate);
   });
 
   elements.exportData.addEventListener("click", exportData);
@@ -310,9 +595,28 @@ function wireEvents() {
       await importDataFromFile(file);
       renderSide();
       renderCalendar();
+      toast("Imported", "Import complete and synced.");
     } catch (error) {
       alert(error?.message ?? "Import failed.");
     }
+  });
+
+  elements.manageCalendar.addEventListener("click", openCalendarDialog);
+
+  elements.copyCalendarKey.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(String(elements.calendarKey.value ?? ""));
+    toast("Copied", "Calendar key copied to clipboard.");
+  });
+  elements.newCalendarKey.addEventListener("click", () => {
+    const generated = crypto?.randomUUID ? crypto.randomUUID() : `cal_${Date.now()}_${Math.random()}`;
+    elements.calendarKey.value = generated;
+    elements.calendarKey.select();
+  });
+  elements.calendarForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const next = elements.calendarKey.value;
+    closeCalendarDialog();
+    await useCalendarId(next);
   });
 
   elements.editSelected.addEventListener("click", () => {
@@ -324,15 +628,14 @@ function wireEvents() {
     if (!state.selectedISO) return;
     const ok = confirm(`Clear link for ${formatSideDate(state.selectedISO)}?`);
     if (!ok) return;
-    setEntry(state.selectedISO, null);
+    setEntryLocal(state.selectedISO, null);
     renderSide();
     renderCalendar();
+    trySyncPending();
   });
 
   elements.sideUrl.addEventListener("click", (event) => {
-    if (!elements.sideUrl.href || elements.sideUrl.href.endsWith("#")) {
-      event.preventDefault();
-    }
+    if (!elements.sideUrl.href || elements.sideUrl.href.endsWith("#")) event.preventDefault();
   });
 
   elements.cancelEdit.addEventListener("click", closeEditDialog);
@@ -348,10 +651,18 @@ function wireEvents() {
       openEditDialog(state.selectedISO);
     }
   });
+
+  window.addEventListener("online", () => {
+    toast("Online", "Trying to sync pending changes…");
+    detectCloud().then(() => trySyncPending());
+  });
 }
 
 wireEvents();
-state.selectedISO = getTodayISO();
 renderSide();
 renderCalendar();
 
+await detectCloud();
+await maybeMigrateLegacyLocalData();
+await loadMonthFromCloud(state.viewDate);
+await trySyncPending();

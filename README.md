@@ -1,28 +1,24 @@
 # Link Calendar
 
-A tiny, static web app that lets you save a link for each day in a month view. Data is stored in your browser via `localStorage`.
+A tiny calendar that lets you save a link per day. When deployed on Vercel, it syncs to Vercel Postgres (tiny Postgres DB).
 
-## Features
+## How it works
 
-- Month view with Monday-first weeks
-- One link per day (title + URL)
-- Double-click a day (or `Ctrl/Cmd+E`) to edit
-- Export/import JSON backups
+- Your browser creates/stores a **calendar key**.
+- The API saves/loads entries from Postgres using that key.
+- Anyone with the key can read/write that calendar (no accounts yet).
+
+## Deploy to Vercel + Postgres
+
+1. Create a new project from `MikeDuignan/link-calendar`: `https://vercel.com/new`
+2. In the Vercel project: **Storage → Create Database → Postgres**
+3. Connect the database to the project (Vercel will add env vars like `POSTGRES_URL`)
+4. Redeploy the project
+
+The table is created automatically on first use.
 
 ## Run locally
 
-Open `index.html` in a browser.
+- Open `index.html` for a local-only version (no cloud sync).
+- Cloud sync requires deploying to Vercel (or running with Vercel CLI).
 
-## Deploy to Vercel
-
-1. Go to `https://vercel.com/new` and import `MikeDuignan/link-calendar`.
-2. Framework preset: **Other** (static site).
-3. Build command: **None** (leave empty).
-4. Output directory: `.` (repo root).
-5. Deploy.
-
-## Deploy to GitHub Pages
-
-1. In GitHub: **Settings → Pages**
-2. Set **Build and deployment** to **Deploy from a branch**
-3. Select branch `main` and folder `/ (root)`
