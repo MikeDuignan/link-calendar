@@ -144,6 +144,7 @@ body::before {
 .monthStats { font-size: 12px; }
 .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); display: inline-block; }
+.dot-warn { background: var(--warn); }
 
 .dow {
   display: grid;
@@ -179,6 +180,29 @@ body::before {
 .day.mutedDay { opacity: 0.55; }
 .day.selected { border-color: rgba(122, 162, 255, 0.7); box-shadow: 0 0 0 2px rgba(122, 162, 255, 0.18) inset; }
 .day.selected .dayNum { text-shadow: 0 0 18px rgba(122, 162, 255, 0.5); }
+.day.hasEntry {
+  background: linear-gradient(180deg, rgba(122, 162, 255, 0.10), rgba(0, 0, 0, 0.18));
+  border-color: rgba(122, 162, 255, 0.26);
+}
+.day.hasEntry:hover {
+  border-color: rgba(122, 162, 255, 0.42);
+}
+.day.hasEntry::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(77, 255, 222, 0.12);
+  opacity: 0.95;
+}
+.day.pending::after {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px rgba(255, 204, 102, 0.12);
+}
 .day.today::before {
   content: "";
   position: absolute;

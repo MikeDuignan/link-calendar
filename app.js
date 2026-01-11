@@ -273,14 +273,15 @@ function renderCalendar() {
     const iso = toISODate(date);
     const isInMonth = date.getMonth() === monthIndex;
     const entry = getEntry(iso);
+    const isPending = Object.prototype.hasOwnProperty.call(state.cache.pending || {}, iso);
 
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `day${isInMonth ? "" : " mutedDay"}${iso === state.selectedISO ? " selected" : ""}${
-      iso === todayISO ? " today" : ""
-    }`;
+    button.className = `day${isInMonth ? "" : " mutedDay"}${entry ? " hasEntry" : ""}${isPending ? " pending" : ""}${
+      iso === state.selectedISO ? " selected" : ""
+    }${iso === todayISO ? " today" : ""}`;
     button.setAttribute("role", "gridcell");
-    button.setAttribute("aria-label", `${formatSideDate(iso)}${entry ? ", has link" : ""}`);
+    button.setAttribute("aria-label", `${formatSideDate(iso)}${entry ? ", has notes" : ""}${isPending ? ", pending sync" : ""}`);
     button.dataset.iso = iso;
 
     const top = document.createElement("div");
